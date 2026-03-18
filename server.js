@@ -50,22 +50,34 @@ function readJsonBody(req) {
 
 function parseInitData(rawInitData) {
   const params = new URLSearchParams(rawInitData);
+
   const hash = params.get('hash');
   if (!hash) throw new Error('initData has no hash');
 
-  const fields = [];
-  for (const [key, value] of params.entries()) {
-    if (key !== 'hash') fields.push(`${key}=${value}`);
+  params.delete('hash');
+
+  const dataCheckString = [...params.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+
+  const secretKey = crypto
+    .createHash('sha256')
+    .update(TELEGRAM_BOT_TOKEN)
+    .digest();
+
+  const computedHash = crypto
+    .createHmac('sha256', secretKey)
+    .update(dataCheckString)
+    .digest('hex');
+
+  if (computedHash !== hash) {
+    throw new Error('initData hash mismatch');
   }
-  fields.sort();
-
-  const secret = crypto.createHmac('sha256', 'WebAppData').update(TELEGRAM_BOT_TOKEN).digest();
-  const check = crypto.createHmac('sha256', secret).update(fields.join('\n')).digest('hex');
-
-  if (check !== hash) throw new Error('initData hash mismatch');
 
   const authDate = Number(params.get('auth_date') || 0);
   if (!authDate) throw new Error('initData missing auth_date');
+
   if (Math.abs(Math.floor(Date.now() / 1000) - authDate) > INIT_DATA_MAX_AGE_SECONDS) {
     throw new Error('initData is expired');
   }
@@ -75,6 +87,7 @@ function parseInitData(rawInitData) {
 
   const user = JSON.parse(userRaw);
   if (!user?.id) throw new Error('Telegram user id missing');
+
   return user;
 }
 
