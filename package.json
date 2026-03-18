@@ -1,0 +1,11 @@
+{
+  "name": "handyrabbit-miniapp",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1"
+  }
+}
