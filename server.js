@@ -119,7 +119,7 @@ function isAdmin(telegramId) {
   return ADMIN_TELEGRAM_IDS.has(String(telegramId));
 }
 
-async function sbRequest(path, { method = 'GET', body, query = '' } = {}) {
+async function sbRequest(path, { method = 'GET', body, query = '', prefer = 'return=representation' } = {}) {
   const url = `${SUPABASE_URL}/rest/v1/${path}${query}`;
   const response = await fetch(url, {
     method,
@@ -127,13 +127,15 @@ async function sbRequest(path, { method = 'GET', body, query = '' } = {}) {
       'Content-Type': 'application/json',
       apikey: SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: 'return=representation'
+      Prefer: prefer
     },
     body: body ? JSON.stringify(body) : undefined
   });
+
   if (!response.ok) {
     throw new Error(`Supabase ${method} ${path} failed: ${await response.text()}`);
   }
+
   if (response.status === 204) return null;
   return response.json();
 }
@@ -147,10 +149,11 @@ async function upsertProfileFromTelegram(user) {
   }];
 
   const rows = await sbRequest('profiles?on_conflict=telegram_id', {
-    method: 'POST',
-    body,
-    query: ''
-  });
+  method: 'POST',
+  body,
+  query: '',
+  prefer: 'resolution=merge-duplicates,return=representation'
+});
 
   return rows[0] || body[0];
 }
