@@ -62,11 +62,6 @@ function parseInitData(rawInitData) {
   const secret = crypto.createHmac('sha256', 'WebAppData').update(TELEGRAM_BOT_TOKEN).digest();
   const check = crypto.createHmac('sha256', secret).update(fields.join('\n')).digest('hex');
 
-  // 🔥 ДОБАВЬ ВОТ ЭТИ ЛОГИ
-  console.log("RAW INIT DATA:", rawInitData);
-  console.log("TG HASH:", hash);
-  console.log("COMPUTED HASH:", check);
-
   if (check !== hash) throw new Error('initData hash mismatch');
 
   const authDate = Number(params.get('auth_date') || 0);
@@ -119,7 +114,7 @@ function isAdmin(telegramId) {
   return ADMIN_TELEGRAM_IDS.has(String(telegramId));
 }
 
-async function sbRequest(path, { method = 'GET', body, query = '', prefer = 'return=representation' } = {}) {
+async function sbRequest(path, { method = 'GET', body, query = '' } = {}) {
   const url = `${SUPABASE_URL}/rest/v1/${path}${query}`;
   const response = await fetch(url, {
     method,
@@ -127,15 +122,13 @@ async function sbRequest(path, { method = 'GET', body, query = '', prefer = 'ret
       'Content-Type': 'application/json',
       apikey: SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: prefer
+      Prefer: 'return=representation'
     },
     body: body ? JSON.stringify(body) : undefined
   });
-
   if (!response.ok) {
     throw new Error(`Supabase ${method} ${path} failed: ${await response.text()}`);
   }
-
   if (response.status === 204) return null;
   return response.json();
 }
@@ -149,11 +142,10 @@ async function upsertProfileFromTelegram(user) {
   }];
 
   const rows = await sbRequest('profiles?on_conflict=telegram_id', {
-  method: 'POST',
-  body,
-  query: '',
-  prefer: 'resolution=merge-duplicates,return=representation'
-});
+    method: 'POST',
+    body,
+    query: ''
+  });
 
   return rows[0] || body[0];
 }
@@ -337,6 +329,65 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const result = await handleNotifyEvent(auth, body);
       return sendJson(res, 200, result);
+    }
+
+    if (req.method === 'POST' && reqUrl.pathname === '/api/orders/complete-action') {
+      const auth = await requireAuth(req);
+      requireNotBlocked(auth.profile);
+      const body = await readJsonBody(req);
+      const orderId = String(body.orderId || '');
+      const action = String(body.action || '');
+      if (!orderId || !action) return sendJson(res, 400, { error: 'orderId and action are required' });
+
+      const order = await requireOrderParticipant(orderId, auth.telegramId);
+      const nowIso = new Date().toISOString();
+
+      if (action === 'request_by_tasker') {
+        if (String(order.assigned_tasker_telegram_id || '') !== String(auth.telegramId)) {
+          return sendJson(res, 403, { error: 'Only assigned tasker can request completion' });
+        }
+        if (order.status !== 'in_progress') {
+          return sendJson(res, 400, { error: 'Completion request allowed only in in_progress' });
+        }
+
+        await sbRequest(`orders?id=eq.${orderId}`, {
+          method: 'PATCH',
+          body: {
+            status: 'awaiting_customer_confirmation',
+            completion_requested_by_tasker_id: auth.telegramId,
+            completion_requested_by_tasker_at: nowIso,
+            updated_at: nowIso
+          }
+        });
+        await notifyOrderParticipants(orderId, 'Исполнитель запросил завершение заказа', auth.telegramId);
+        return sendJson(res, 200, { ok: true, status: 'awaiting_customer_confirmation' });
+      }
+
+      if (action === 'confirm_by_customer' || action === 'direct_by_customer') {
+        if (String(order.customer_telegram_id || '') !== String(auth.telegramId)) {
+          return sendJson(res, 403, { error: 'Only customer can complete order' });
+        }
+
+        if (action === 'confirm_by_customer' && order.status !== 'awaiting_customer_confirmation') {
+          return sendJson(res, 400, { error: 'Order is not waiting for customer confirmation' });
+        }
+
+        if (action === 'direct_by_customer' && !['assigned', 'in_progress', 'awaiting_customer_confirmation'].includes(order.status)) {
+          return sendJson(res, 400, { error: 'Direct completion is not allowed for current status' });
+        }
+
+        await sbRequest(`orders?id=eq.${orderId}`, {
+          method: 'PATCH',
+          body: {
+            status: 'done',
+            updated_at: nowIso
+          }
+        });
+        await notifyOrderParticipants(orderId, 'Заказ завершён', auth.telegramId);
+        return sendJson(res, 200, { ok: true, status: 'done' });
+      }
+
+      return sendJson(res, 400, { error: 'Unknown completion action' });
     }
 
     if (req.method === 'POST' && reqUrl.pathname === '/api/admin/block-user') {
