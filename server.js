@@ -139,8 +139,7 @@ async function upsertProfileFromTelegram(user) {
     telegram_id: telegramId,
     first_name: user.first_name || '',
     last_name: user.last_name || '',
-    username: user.username || `tg_${user.id}`,
-    updated_at: new Date().toISOString()
+    username: user.username || `tg_${user.id}`
   };
 
   const existingRows = await sbRequest(
@@ -160,7 +159,7 @@ async function upsertProfileFromTelegram(user) {
 
   const rows = await sbRequest('profiles', {
     method: 'POST',
-    body: [{ ...payload, created_at: new Date().toISOString() }]
+    body: [payload]
   });
 
   return rows?.[0] || payload;
