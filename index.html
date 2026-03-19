@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HandyRabbit Mini App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="authScreen" class="auth-screen soft-card raised">
+        <p class="eyebrow">Telegram Mini App</p>
+        <h1>HandyRabbit</h1>
+        <p class="auth-text">Вход через Telegram. Выберите роль для завершения профиля.</p>
+        <p id="telegramUserInfo" class="details"></p>
+
+        <form id="authForm" class="auth-form">
+          <label>
+            Роль
+            <select id="roleInput" required>
+              <option value="Клиент">Клиент</option>
+              <option value="Исполнитель">Исполнитель</option>
+            </select>
+          </label>
+          <button class="primary-btn" type="submit">Продолжить</button>
+        </form>
+      </section>
+
+      <div id="appContent" class="hidden app-layout">
+        <div id="globalLoader" class="global-loader hidden" aria-live="polite">
+          <div class="spinner"></div>
+          <p>Загрузка...</p>
+        </div>
+
+        <header class="topbar soft-card raised">
+          <div>
+            <p class="eyebrow">HandyRabbit</p>
+            <h2>Привет, <span id="profileName">друг</span></h2>
+            <p class="details" id="profileMeta"></p>
+          </div>
+          <button id="themeToggle" class="icon-btn" aria-label="Сменить тему">◐</button>
+        </header>
+
+        <section id="homeScreen" class="screen">
+          <section class="hero soft-card raised">
+            <div>
+              <h3 id="homeTitle">Панель</h3>
+              <p id="homeSubtitle">Ролевая главная панель</p>
+            </div>
+            <button id="openTaskModal" class="primary-btn">+ Создать заказ</button>
+          </section>
+
+          <section class="panel soft-card raised">
+            <input id="searchInput" type="search" placeholder="Поиск по заказам и категориям" />
+            <div class="section-header compact">
+              <h3 class="section-title">Категории</h3>
+              <button id="sortBtn" class="secondary-btn slim" type="button">Сорт: рейтинг</button>
+            </div>
+            <div class="inline-controls">
+              <label>
+                Статус
+                <select id="statusFilterInput">
+                  <option value="all">Все</option>
+                  <option value="new">Новый</option>
+                  <option value="assigned">Исполнитель назначен</option>
+                  <option value="in_progress">В работе</option>
+                  <option value="done">Завершён</option>
+                  <option value="canceled">Отменён</option>
+                  <option value="hidden">Скрыт</option>
+                </select>
+              </label>
+              <label>
+                Сортировка
+                <select id="ordersSortInput">
+                  <option value="newest">Сначала новые</option>
+                  <option value="oldest">Сначала старые</option>
+                  <option value="status">По статусу</option>
+                  <option value="responses">По откликам</option>
+                </select>
+              </label>
+            </div>
+            <div id="categories" class="chips"></div>
+          </section>
+
+          <section class="panel soft-card raised">
+            <h3 id="homeBlockATitle" class="section-title">Блок A</h3>
+            <div id="homeBlockAList" class="order-list"></div>
+            <p id="homeBlockAEmpty" class="empty-state hidden"></p>
+          </section>
+
+          <section class="panel soft-card raised">
+            <h3 id="homeBlockBTitle" class="section-title">Блок B</h3>
+            <div id="homeBlockBList" class="order-list"></div>
+            <p id="homeBlockBEmpty" class="empty-state hidden"></p>
+          </section>
+
+          <section class="panel soft-card raised">
+            <h3 id="homeBlockCTitle" class="section-title">Блок C</h3>
+            <div id="homeBlockCList" class="tasker-list"></div>
+            <p id="homeBlockCEmpty" class="empty-state hidden"></p>
+          </section>
+        </section>
+
+        <section id="ordersScreen" class="screen hidden">
+          <section class="panel soft-card raised">
+            <div class="section-header">
+              <h3 class="section-title" id="ordersTitle">Заказы</h3>
+              <div class="filters" id="orderFilters"></div>
+            </div>
+            <div id="ordersList" class="order-list"></div>
+            <p id="ordersEmpty" class="empty-state hidden"></p>
+          </section>
+        </section>
+
+        <section id="orderDetailScreen" class="screen hidden">
+          <section class="panel soft-card raised">
+            <div class="section-header">
+              <h3 class="section-title">Детали заказа</h3>
+              <button id="backToOrders" type="button" class="secondary-btn slim">← К списку</button>
+            </div>
+            <div id="orderDetailBody" class="detail-grid"></div>
+            <div id="orderActions" class="actions-row"></div>
+            <div class="section-header compact">
+              <h4>Отклики</h4>
+              <button id="respondOrderBtn" class="secondary-btn slim hidden" type="button">Откликнуться</button>
+            </div>
+            <div id="responsesList" class="order-list"></div>
+            <p id="responsesEmpty" class="empty-state hidden"></p>
+          </section>
+        </section>
+
+        <section id="chatsScreen" class="screen hidden">
+          <section class="panel soft-card raised">
+            <h3 class="section-title">Чаты</h3>
+            <div id="chatsList" class="chat-list"></div>
+            <p id="chatsEmpty" class="empty-state hidden"></p>
+          </section>
+
+          <section id="chatDetail" class="panel soft-card raised hidden">
+            <div class="section-header compact">
+              <h4 id="chatTitle">Чат</h4>
+            </div>
+            <div id="chatMessages" class="messages"></div>
+            <form id="chatForm" class="chat-form">
+              <input id="chatInput" placeholder="Введите сообщение" required />
+              <button class="primary-btn small" type="submit">Отправить</button>
+            </form>
+          </section>
+        </section>
+
+        <section id="profileScreen" class="screen hidden">
+          <section class="panel soft-card raised profile-card">
+            <img id="profileAvatar" class="avatar avatar-lg" alt="avatar" />
+            <div>
+              <h3 id="profileTitle">Профиль</h3>
+              <p class="details" id="profileUsername"></p>
+              <p class="details" id="profileRole"></p>
+              <p class="details" id="profileInsights"></p>
+            </div>
+          </section>
+
+          <section class="panel soft-card raised">
+            <h4>Редактирование профиля</h4>
+            <form id="profileForm" class="auth-form compact-form">
+              <label>Телефон <input id="profilePhone" placeholder="+7 900 123-45-67" /></label>
+              <label>Город <input id="profileCity" placeholder="Москва" /></label>
+              <button type="submit" class="primary-btn">Сохранить профиль</button>
+            </form>
+          </section>
+        </section>
+
+        <nav id="bottomNav" class="bottom-nav soft-card raised">
+          <span id="navIndicator" class="nav-indicator" aria-hidden="true"></span>
+          <button class="active" data-screen="home">🏠 Главная</button>
+          <button data-screen="orders">🗂 Заказы</button>
+          <button data-screen="chats">💬 Чаты</button>
+          <button data-screen="profile">👤 Профиль</button>
+        </nav>
+      </div>
+    </main>
+
+    <dialog id="taskDialog">
+      <form id="taskForm" class="dialog-content">
+        <h3>Новая задача</h3>
+        <label>Название<input id="taskTitle" required placeholder="Повесить полку" /></label>
+        <label>Описание<input id="taskDescription" required placeholder="Нужно аккуратно закрепить на стене" /></label>
+        <label>Категория<select id="taskCategory"></select></label>
+        <label>Бюджет (₽)<input id="taskBudget" type="number" min="500" step="100" required placeholder="2500" /></label>
+        <label>Адрес<input id="taskAddress" required placeholder="ул. Ленина, 1" /></label>
+        <label>Удобное время<input id="taskTime" required placeholder="Сегодня после 19:00" /></label>
+        <menu>
+          <button type="button" id="cancelDialog" class="secondary-btn">Отмена</button>
+          <button type="submit" class="primary-btn">Создать заказ</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="responseDialog">
+      <form id="responseForm" class="dialog-content">
+        <h3>Отклик на заказ</h3>
+        <label>Ваша цена<input id="responsePrice" type="number" min="500" step="100" required placeholder="2300" /></label>
+        <label>Комментарий<input id="responseMessage" required placeholder="Смогу выполнить сегодня" /></label>
+        <menu>
+          <button type="button" id="cancelResponseDialog" class="secondary-btn">Отмена</button>
+          <button type="submit" class="primary-btn">Отправить отклик</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <template id="taskerTemplate">
+      <article class="tasker soft-card raised">
+        <div class="tasker-main">
+          <img class="avatar" alt="" />
+          <div>
+            <h4 class="name"></h4>
+            <p class="details"></p>
+            <p class="tags"></p>
+          </div>
+        </div>
+        <div class="tasker-side">
+          <span class="rating"></span>
+          <span class="price"></span>
+          <button class="primary-btn small">Выбрать</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
