@@ -134,35 +134,20 @@ async function sbRequest(path, { method = 'GET', body, query = '' } = {}) {
 }
 
 async function upsertProfileFromTelegram(user) {
-  const telegramId = String(user.id);
-  const payload = {
-    telegram_id: telegramId,
+  const body = [{
+    telegram_id: String(user.id),
     first_name: user.first_name || '',
     last_name: user.last_name || '',
     username: user.username || `tg_${user.id}`
-  };
+  }];
 
-  const existingRows = await sbRequest(
-    `profiles?telegram_id=eq.${encodeURIComponent(telegramId)}&select=*`
-  );
-
-  if (existingRows?.length) {
-    const rows = await sbRequest(
-      `profiles?telegram_id=eq.${encodeURIComponent(telegramId)}`,
-      {
-        method: 'PATCH',
-        body: payload
-      }
-    );
-    return rows?.[0] || { ...existingRows[0], ...payload };
-  }
-
-  const rows = await sbRequest('profiles', {
+  const rows = await sbRequest('profiles?on_conflict=telegram_id', {
     method: 'POST',
-    body: [payload]
+    body,
+    query: ''
   });
 
-  return rows?.[0] || payload;
+  return rows[0] || body[0];
 }
 
 async function getProfile(telegramId) {
