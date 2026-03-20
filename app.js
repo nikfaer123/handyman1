@@ -568,26 +568,17 @@ async function ensureChat(order) {
   return data.id;
 }
 
-async function assignTasker(orderId, responseId) {
-  const responses = appState.responsesByOrder[orderId] || [];
-  const response = responses.find((r) => r.id === responseId);
-  if (!response) throw new Error("Отклик не найден");
+async function assignTasker(orderId, taskerTelegramId, taskerName) {
+  const payload = await apiRequest("/api/orders/assign-tasker", {
+    method: "POST",
+    body: {
+      orderId,
+      taskerTelegramId,
+      taskerName
+    }
+  });
 
-  const order = appState.orders.find((o) => o.id === orderId);
-  if (!order) throw new Error("Заказ не найден");
-
-  const { error } = await appState.supabase
-    .from("orders")
-    .update({
-      assigned_tasker_telegram_id: response.taskerId,
-      assigned_tasker_name: response.taskerName,
-      status: "assigned"
-    })
-    .eq("id", orderId);
-
-  if (error) throw error;
-
-  await ensureChat({ ...order, assignedTasker: { id: response.taskerId, name: response.taskerName } });
+  return payload?.order || null;
 }
 
 async function updateOrderStatus(orderId, status) {
@@ -989,7 +980,7 @@ function renderResponses(order) {
       btn.onclick = async () => {
         try {
           if (!confirmAction("Принять этого исполнителя?")) return;
-          await assignTasker(order.id, r.id);
+          await assignTasker(order.id, r.taskerId, r.taskerName);
           await notifyEvent("tasker_assigned", { orderId: order.id, taskerTelegramId: r.taskerId });
           await refreshData();
           renderOrderDetail();
@@ -1123,22 +1114,6 @@ function renderOrderDetail() {
         await apiRequest("/api/orders/complete-action", {
           method: "POST",
           body: { orderId: order.id, action: "confirm_by_customer" }
-        });
-        await refreshData();
-        renderOrderDetail();
-        showToast("Заказ завершён");
-      } catch (error) {
-        showToast(parseError(error, "Ошибка обновления статуса"));
-      }
-    }, true);
-  }
-
-  if (isCustomer && ["assigned", "in_progress"].includes(order.status)) {
-    addAction("Завершить заказ", async () => {
-      try {
-        await apiRequest("/api/orders/complete-action", {
-          method: "POST",
-          body: { orderId: order.id, action: "direct_by_customer" }
         });
         await refreshData();
         renderOrderDetail();
@@ -1283,12 +1258,28 @@ async function openChat(chatId) {
   els.chatMessages.innerHTML = "";
 
   const isClosedChat = ["done", "canceled", "cancelled", "hidden"].includes(order?.status);
+  
+  if (isClosedChat) {
+  const notice = document.createElement("p");
+  notice.className = "details";
+  notice.textContent = "Заказ завершён. Чат доступен только для чтения.";
+  els.chatMessages.append(notice);
+}
+
   const chatSubmitBtn = els.chatForm.querySelector("button[type='submit']");
+
   els.chatInput.disabled = isClosedChat;
-  if (chatSubmitBtn) {
-    chatSubmitBtn.disabled = isClosedChat;
-  }
-  els.chatInput.placeholder = isClosedChat ? "Чат закрыт" : "Введите сообщение";
+  els.chatInput.required = !isClosedChat;
+  els.chatInput.placeholder = isClosedChat
+  ? "Чат закрыт, отправка сообщений недоступна"
+  : "Введите сообщение";
+
+if (chatSubmitBtn) {
+  chatSubmitBtn.disabled = isClosedChat;
+  chatSubmitBtn.textContent = isClosedChat ? "Чат закрыт" : "Отправить";
+}
+
+  els.chatForm.classList.toggle("readonly", isClosedChat);
 
   if (!(appState.messagesByChat[chatId] || []).length) {
     const empty = document.createElement("p");
@@ -1631,23 +1622,33 @@ async function bindEvents() {
   });
 
   els.chatForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    await withLoading(async () => {
-      try {
-        const chatId = appState.ui.selectedChatId;
-        const text = els.chatInput.value.trim();
-        if (!chatId || !text) return;
-        await sendMessage(chatId, text);
-        await notifyEvent("new_message", { chatId });
-        els.chatInput.value = "";
-        await openChat(chatId);
-        renderChats();
-        showToast("Сообщение отправлено");
-      } catch (error) {
-        showToast(parseError(error, "Ошибка отправки сообщения"));
+  e.preventDefault();
+  await withLoading(async () => {
+    try {
+      const chatId = appState.ui.selectedChatId;
+      const text = els.chatInput.value.trim();
+      if (!chatId || !text) return;
+
+      const chat = appState.chats.find((c) => c.id === chatId);
+      const order = appState.orders.find((o) => o.id === chat?.order_id);
+      const isClosedChat = ["done", "canceled", "cancelled", "hidden"].includes(order?.status);
+
+      if (isClosedChat) {
+        showToast("Чат закрыт, отправка сообщений недоступна");
+        return;
       }
-    }, { button: e.submitter, loadingText: "Отправляем..." });
-  });
+
+      await sendMessage(chatId, text);
+      await notifyEvent("new_message", { chatId });
+      els.chatInput.value = "";
+      await openChat(chatId);
+      renderChats();
+      showToast("Сообщение отправлено");
+    } catch (error) {
+      showToast(parseError(error, "Ошибка отправки сообщения"));
+    }
+  }, { button: e.submitter, loadingText: "Отправляем..." });
+});
 
   els.navButtons.forEach((btn) => btn.addEventListener("click", () => setScreen(btn.dataset.screen)));
   els.themeToggle.addEventListener("click", toggleTheme);
