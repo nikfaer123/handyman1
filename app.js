@@ -50,6 +50,7 @@ const appState = {
     ordersFilter: "active",
     selectedOrderId: null,
     selectedChatId: null,
+    showArchivedChats: false,
     pendingDoneByTasker: {},
     expandedResponses: {}
   },
@@ -139,6 +140,7 @@ const els = {
 
   chatsList: $("chatsList"),
   chatsEmpty: $("chatsEmpty"),
+  toggleArchivedChats: $("toggleArchivedChats"),
   chatDetail: $("chatDetail"),
   chatTitle: $("chatTitle"),
   chatMessages: $("chatMessages"),
@@ -1238,28 +1240,18 @@ function renderChats() {
 
       const orderA = appState.orders.find((o) => o.id === a.order_id);
       const orderB = appState.orders.find((o) => o.id === b.order_id);
-      const doneA = ["done", "canceled", "cancelled"].includes(orderA?.status);
-      const doneB = ["done", "canceled", "cancelled"].includes(orderB?.status);
-      if (doneA !== doneB) return doneA ? 1 : -1;
 
       const messagesA = appState.messagesByChat[a.id] || [];
       const messagesB = appState.messagesByChat[b.id] || [];
       const updatedA = messagesA[messagesA.length - 1]?.created_at || a.created_at;
       const updatedB = messagesB[messagesB.length - 1]?.created_at || b.created_at;
+
       return new Date(updatedB) - new Date(updatedA);
     });
 
-  els.chatsList.innerHTML = "";
-  els.chatDetail.classList.add("hidden");
-  els.chatsEmpty.classList.toggle("hidden", available.length > 0);
-
-  if (!available.length) {
-    els.chatsEmpty.textContent = "Сообщений пока нет";
-    return;
-  }
-
   const openChats = [];
   const closedChats = [];
+
   available.forEach((chat) => {
     const order = appState.orders.find((o) => o.id === chat.order_id);
     if (["done", "canceled", "cancelled", "hidden"].includes(order?.status)) {
@@ -1269,10 +1261,30 @@ function renderChats() {
     }
   });
 
-  const renderChatCard = (chat) => {
+  const visibleChats = appState.ui.showArchivedChats ? closedChats : openChats;
+
+  els.chatsList.innerHTML = "";
+  els.chatDetail.classList.add("hidden");
+  els.chatsEmpty.classList.toggle("hidden", visibleChats.length > 0);
+
+  if (els.toggleArchivedChats) {
+    els.toggleArchivedChats.textContent = appState.ui.showArchivedChats
+      ? "Показать активные"
+      : "Показать архив";
+  }
+
+  if (!visibleChats.length) {
+    els.chatsEmpty.textContent = appState.ui.showArchivedChats
+      ? "Архивных чатов пока нет"
+      : "Активных чатов пока нет";
+    return;
+  }
+
+  visibleChats.forEach((chat) => {
     const order = appState.orders.find((o) => o.id === chat.order_id);
     const messages = appState.messagesByChat[chat.id] || [];
     const last = messages[messages.length - 1];
+
     const card = document.createElement("article");
     card.className = "chat-item soft-card raised";
     card.innerHTML = `
@@ -1283,19 +1295,7 @@ function renderChats() {
       <button class="secondary-btn slim" data-chat-id="${chat.id}" type="button">Открыть</button>
     `;
     els.chatsList.append(card);
-  };
-
-  if (openChats.length) {
-    openChats.forEach(renderChatCard);
-  }
-
-  if (closedChats.length) {
-    const divider = document.createElement("p");
-    divider.className = "details";
-    divider.textContent = "Закрытые чаты";
-    els.chatsList.append(divider);
-    closedChats.forEach(renderChatCard);
-  }
+  });
 }
 
 async function openChat(chatId) {
@@ -1698,6 +1698,14 @@ async function bindEvents() {
 
   els.backToOrders.addEventListener("click", () => setScreen("orders"));
 
+  if (els.toggleArchivedChats) {
+  els.toggleArchivedChats.addEventListener("click", () => {
+    appState.ui.showArchivedChats = !appState.ui.showArchivedChats;
+    appState.ui.selectedChatId = null;
+    renderChats();
+  });
+}
+
   els.chatsList.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-chat-id]");
     if (!btn) return;
@@ -1737,7 +1745,16 @@ async function bindEvents() {
   }, { button: e.submitter, loadingText: "Отправляем..." });
 });
 
-  els.navButtons.forEach((btn) => btn.addEventListener("click", () => setScreen(btn.dataset.screen)));
+  els.navButtons.forEach((btn) =>
+  btn.addEventListener("click", () => {
+    if (btn.dataset.screen === "chats") {
+      appState.ui.showArchivedChats = false;
+      appState.ui.selectedChatId = null;
+      renderChats();
+    }
+    setScreen(btn.dataset.screen);
+  })
+);
   els.themeToggle.addEventListener("click", toggleTheme);
   window.addEventListener("resize", updateNavIndicator);
   window.addEventListener("beforeunload", destroyRealtimeSubscriptions);
