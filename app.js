@@ -121,6 +121,9 @@ const els = {
   orderActions: $("orderActions"),
   respondOrderBtn: $("respondOrderBtn"),
   backToOrders: $("backToOrders"),
+  responsesDialog: $("responsesDialog"),
+  responsesDialogList: $("responsesDialogList"),
+  closeResponsesDialog: $("closeResponsesDialog"),
 
   taskDialog: $("taskDialog"),
   taskForm: $("taskForm"),
@@ -996,14 +999,73 @@ function renderOrders() {
   list.forEach((o) => els.ordersList.append(createOrderListItem(o)));
 }
 
-function renderResponses(order) {
-  els.responsesList.innerHTML = "";
+function getVisibleResponsesForOrder(order) {
   const isCustomer = role() === "Клиент";
   const myId = String(appState.profile.telegramId);
 
-  const visible = (isCustomer ? order.responses || [] : (order.responses || []).filter((r) => r.taskerId === myId)).sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-  );
+  return (isCustomer
+    ? order.responses || []
+    : (order.responses || []).filter((r) => r.taskerId === myId)
+  ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function openResponsesArchive(order) {
+  if (!els.responsesDialog || !els.responsesDialogList) return;
+
+  const visible = getVisibleResponsesForOrder(order);
+  els.responsesDialogList.innerHTML = "";
+
+  if (!visible.length) {
+    const empty = document.createElement("p");
+    empty.className = "details";
+    empty.textContent = "Откликов пока нет";
+    els.responsesDialogList.append(empty);
+  } else {
+    const isCustomer = role() === "Клиент";
+
+    visible.forEach((r) => {
+      const card = document.createElement("article");
+      card.className = "order-card soft-card raised";
+      card.innerHTML = `
+        <div>
+          <h4>${r.taskerName}</h4>
+          <p class="details">${r.message}</p>
+          <p class="details">${r.price} ₽ • ${new Date(r.createdAt).toLocaleString("ru-RU")}</p>
+        </div>
+      `;
+
+      if (isCustomer && order.status === "new") {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "primary-btn small";
+        btn.textContent = "Выбрать исполнителя";
+        btn.onclick = async () => {
+          try {
+            if (!confirmAction("Принять этого исполнителя?")) return;
+            await assignTasker(order.id, r.taskerId, r.taskerName);
+            await notifyEvent("tasker_assigned", { orderId: order.id, taskerTelegramId: r.taskerId });
+            els.responsesDialog.close();
+            await refreshData();
+            renderOrderDetail();
+            showToast("Исполнитель выбран");
+          } catch (error) {
+            showToast(parseError(error, "Не удалось назначить исполнителя"));
+          }
+        };
+        card.append(btn);
+      }
+
+      els.responsesDialogList.append(card);
+    });
+  }
+
+  els.responsesDialog.showModal();
+}
+
+function renderResponses(order) {
+  els.responsesList.innerHTML = "";
+
+  const visible = getVisibleResponsesForOrder(order);
 
   els.responsesEmpty.classList.toggle("hidden", visible.length > 0);
   if (!visible.length) {
@@ -1011,9 +1073,9 @@ function renderResponses(order) {
     return;
   }
 
-  const limit = 5;
-  const expanded = Boolean(appState.ui.expandedResponses[order.id]);
-  const source = expanded ? visible : visible.slice(0, limit);
+  const limit = 3;
+  const source = visible.slice(0, limit);
+  const isCustomer = role() === "Клиент";
 
   source.forEach((r) => {
     const card = document.createElement("article");
@@ -1046,6 +1108,19 @@ function renderResponses(order) {
       card.append(btn);
     }
 
+    els.responsesList.append(card);
+  });
+
+  if (visible.length > limit) {
+    const openArchiveBtn = document.createElement("button");
+    openArchiveBtn.type = "button";
+    openArchiveBtn.className = "secondary-btn slim";
+    openArchiveBtn.textContent = `Показать все (${visible.length})`;
+    openArchiveBtn.onclick = () => openResponsesArchive(order);
+    els.responsesList.append(openArchiveBtn);
+  }
+}
+
     if (appState.isAdmin) {
       const blockBtn = document.createElement("button");
       blockBtn.type = "button";
@@ -1068,20 +1143,16 @@ function renderResponses(order) {
     }
 
     els.responsesList.append(card);
-  });
 
   if (visible.length > limit) {
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "secondary-btn slim";
-    toggle.textContent = expanded ? "Свернуть отклики" : `Показать ещё (${visible.length - limit})`;
-    toggle.onclick = () => {
-      appState.ui.expandedResponses[order.id] = !expanded;
-      renderResponses(order);
-    };
-    els.responsesList.append(toggle);
+    const openArchiveBtn = document.createElement("button");
+    openArchiveBtn.type = "button";
+    openArchiveBtn.className = "secondary-btn slim";
+    openArchiveBtn.textContent = `Показать все (${visible.length})`;
+    openArchiveBtn.onclick = () => openResponsesArchive(order);
+    els.responsesList.append(openArchiveBtn);
   }
-}
+  
 
 function renderOrderDetail() {
   const order = appState.orders.find((o) => o.id === appState.ui.selectedOrderId);
@@ -1758,6 +1829,17 @@ async function bindEvents() {
   els.themeToggle.addEventListener("click", toggleTheme);
   window.addEventListener("resize", updateNavIndicator);
   window.addEventListener("beforeunload", destroyRealtimeSubscriptions);
+
+  if (els.closeResponsesDialog && els.responsesDialog) {
+  els.closeResponsesDialog.addEventListener("click", () => {
+    els.responsesDialog.close();
+  });
+
+  els.responsesDialog.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    els.responsesDialog.close();
+  });
+}
 }
 
 async function initApp() {
