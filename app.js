@@ -900,11 +900,26 @@ function renderHomeScreen() {
       els.homeBlockBEmpty.textContent = "Откликов пока нет";
       els.homeBlockBEmpty.classList.remove("hidden");
     } else {
-      withResponses.forEach((o) => {
+      withResponses.slice(0, 3).forEach((o) => {
         const card = createOrderListItem(o, `Отклики: ${o.responses.length}`);
         els.homeBlockBList.append(card);
       });
     }
+
+    if (withResponses.length > 3) {
+    const moreBtn = document.createElement("button");
+    moreBtn.type = "button";
+    moreBtn.className = "secondary-btn slim";
+    moreBtn.textContent = `Показать все (${withResponses.length})`;
+
+     moreBtn.onclick = () => {
+    appState.ui.ordersFilter = "responses";
+    setScreen("orders");
+    renderOrders();
+  };
+
+  els.homeBlockBList.append(moreBtn);
+}
 
     els.homeBlockCTitle.textContent = "Рекомендованные исполнители";
     let taskers = [...TASKERS];
@@ -958,11 +973,12 @@ function renderOrders() {
   const isCustomer = role() === "Клиент";
 
   const filters = isCustomer
-    ? [
-        { key: "active", label: "Active" },
-        { key: "done", label: "Done" },
-        { key: "canceled", label: "Cancelled" }
-      ]
+  ? [
+      { key: "active", label: "Активные" },
+      { key: "responses", label: "С откликами" },
+      { key: "done", label: "Завершённые" },
+      { key: "canceled", label: "Отменённые" }
+    ]
     : [
         { key: "new", label: "Доступные" },
         { key: "responses", label: "Мои отклики" },
@@ -976,16 +992,17 @@ function renderOrders() {
     .map((f) => `<button type="button" data-filter="${f.key}" class="filter-btn ${appState.ui.ordersFilter === f.key ? "active" : ""}">${f.label}</button>`)
     .join("");
 
-  let list = [];
-  if (isCustomer) {
-    if (appState.ui.ordersFilter === "active") list = collections.active;
-    if (appState.ui.ordersFilter === "done") list = collections.done;
-    if (appState.ui.ordersFilter === "canceled") list = collections.cancelled;
-  } else {
-    if (appState.ui.ordersFilter === "new") list = collections.newOrders;
-    if (appState.ui.ordersFilter === "responses") list = collections.myResponses;
-    if (appState.ui.ordersFilter === "mine") list = collections.myActive;
-  }
+ let list = [];
+if (isCustomer) {
+  if (appState.ui.ordersFilter === "active") list = collections.active;
+  if (appState.ui.ordersFilter === "responses") list = collections.responses;
+  if (appState.ui.ordersFilter === "done") list = collections.done;
+  if (appState.ui.ordersFilter === "canceled") list = collections.cancelled;
+} else {
+  if (appState.ui.ordersFilter === "new") list = collections.newOrders;
+  if (appState.ui.ordersFilter === "responses") list = collections.myResponses;
+  if (appState.ui.ordersFilter === "mine") list = collections.myActive;
+}
 
   list = passFilters(list);
 
