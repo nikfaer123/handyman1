@@ -949,13 +949,32 @@ function renderHomeScreen() {
     }
 
     els.homeBlockBTitle.textContent = "Мои отклики";
-    const myResponses = passFilters(collections.myResponses);
-    if (!myResponses.length) {
-      els.homeBlockBEmpty.textContent = "Вы ещё не откликались";
-      els.homeBlockBEmpty.classList.remove("hidden");
-    } else {
-      myResponses.forEach((o) => els.homeBlockBList.append(createOrderListItem(o, "Открыть")));
-    }
+const myResponses = passFilters(collections.myResponses);
+
+if (!myResponses.length) {
+  els.homeBlockBEmpty.textContent = "Откликов пока нет";
+  els.homeBlockBEmpty.classList.remove("hidden");
+} else {
+  myResponses.slice(0, 3).forEach((o) => {
+    const card = createOrderListItem(o);
+    els.homeBlockBList.append(card);
+  });
+
+  if (myResponses.length > 3) {
+    const moreBtn = document.createElement("button");
+    moreBtn.type = "button";
+    moreBtn.className = "secondary-btn slim";
+    moreBtn.textContent = `Показать все (${myResponses.length})`;
+
+    moreBtn.onclick = () => {
+      appState.ui.ordersFilter = "responses";
+      setScreen("orders");
+      renderOrders();
+    };
+
+    els.homeBlockBList.append(moreBtn);
+  }
+}
 
     els.homeBlockCTitle.textContent = "Мои активные заказы";
     const myActive = passFilters(collections.myActive);
