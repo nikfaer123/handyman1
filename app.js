@@ -598,10 +598,32 @@ async function fetchChats() {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  appState.chats = data || [];
+
+  appState.chats = (data || []).filter(
+    (chat) =>
+      String(chat.customer_telegram_id) === uid ||
+      String(chat.tasker_telegram_id) === uid
+  );
 }
 
 async function fetchMessages(chatId) {
+  const uid = String(appState.profile.telegramId);
+  const chat = appState.chats.find((c) => c.id === chatId);
+
+  if (!chat) {
+    appState.messagesByChat[chatId] = [];
+    throw new Error("Чат недоступен");
+  }
+
+  const isParticipant =
+    String(chat.customer_telegram_id) === uid ||
+    String(chat.tasker_telegram_id) === uid;
+
+  if (!isParticipant) {
+    appState.messagesByChat[chatId] = [];
+    throw new Error("Нет доступа к чату");
+  }
+
   const { data, error } = await appState.supabase
     .from("messages")
     .select("*")
@@ -1277,10 +1299,28 @@ function renderChats() {
 }
 
 async function openChat(chatId) {
+    const uid = String(appState.profile.telegramId);
+    const chat = appState.chats.find((c) => c.id === chatId);
+
+  if (!chat) {
+    showToast("Чат недоступен");
+    return;
+  }
+
+  const isParticipant =
+    String(chat.customer_telegram_id) === uid ||
+    String(chat.tasker_telegram_id) === uid;
+
+  if (!isParticipant) {
+    showToast("Нет доступа к этому чату");
+    return;
+  }
+
   await fetchMessages(chatId);
   appState.ui.selectedChatId = chatId;
 
-  const chat = appState.chats.find((c) => c.id === chatId);
+  // chat уже объявлен выше 
+  // просто используем его 
   if (!chat) return;
 
   const order = appState.orders.find((o) => o.id === chat.order_id);
