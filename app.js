@@ -82,6 +82,9 @@ const els = {
   profileTitle: $("profileTitle"),
   profileUsername: $("profileUsername"),
   profileRole: $("profileRole"),
+  profileRoleSwitcher: $("profileRoleSwitcher"),
+  switchToCustomerBtn: $("switchToCustomerBtn"),
+  switchToTaskerBtn: $("switchToTaskerBtn"),
   profileForm: $("profileForm"),
   profilePhone: $("profilePhone"),
   profileCity: $("profileCity"),
@@ -658,6 +661,23 @@ function syncRoleUI() {
     : "Смотрите новые заявки, управляйте откликами и активными работами";
 }
 
+async function switchRole(nextRole, button = null) {
+  const currentRole = role();
+  if (!nextRole || nextRole === currentRole) return;
+
+  await withLoading(async () => {
+    await upsertProfile({ role: nextRole });
+    syncRoleUI();
+    await refreshData();
+    updateProfileUI();
+    setProfileFormEditable(false);
+    showToast(`Роль переключена: ${nextRole}`);
+  }, {
+    button,
+    loadingText: "Переключаем..."
+  });
+}
+
 function updateProfileUI() {
   const p = appState.profile;
   if (!p) return;
@@ -672,6 +692,16 @@ function updateProfileUI() {
   els.profileTitle.textContent = fullName;
   els.profileUsername.textContent = `Telegram: @${p.username}`;
   els.profileRole.textContent = `Роль: ${roleLabel}`;
+  if (els.switchToCustomerBtn && els.switchToTaskerBtn) {
+  const isCustomer = p.role === "Клиент";
+  const isTasker = p.role === "Исполнитель";
+
+  els.switchToCustomerBtn.classList.toggle("active-role", isCustomer);
+  els.switchToTaskerBtn.classList.toggle("active-role", isTasker);
+
+  els.switchToCustomerBtn.disabled = isCustomer;
+  els.switchToTaskerBtn.disabled = isTasker;
+}
   els.profilePhone.value = p.phone || "";
   els.profileCity.value = p.city || "";
 
@@ -1258,7 +1288,7 @@ async function openChat(chatId) {
   els.chatMessages.innerHTML = "";
 
   const isClosedChat = ["done", "canceled", "cancelled", "hidden"].includes(order?.status);
-  
+
   if (isClosedChat) {
   const notice = document.createElement("p");
   notice.className = "details";
@@ -1446,36 +1476,53 @@ async function bindEvents() {
   if (appState.realtime.isBound) return;
   appState.realtime.isBound = true;
 
-  els.authForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    await withLoading(async () => {
+  if (els.switchToCustomerBtn) {
+    els.switchToCustomerBtn.addEventListener("click", async (e) => {
       try {
-        const selectedRole = els.roleInput.value;
-        if (!["Клиент", "Исполнитель"].includes(selectedRole)) {
-          showToast("Выберите роль");
-          return;
-        }
-
-        await upsertProfile({ role: selectedRole });
-        if (!appState.profile?.role) {
-          showToast("Роль не выбрана");
-          els.authScreen.classList.remove("hidden");
-          els.appContent.classList.add("hidden");
-          return;
-        }
-
-        els.authScreen.classList.add("hidden");
-        els.appContent.classList.remove("hidden");
-        await refreshData();
-        setProfileFormEditable(false);
-        initRealtimeSubscriptions();
-        setScreen("home");
-        showToast("Профиль сохранён");
+        await switchRole("Клиент", e.currentTarget);
       } catch (error) {
-        showToast(parseError(error, "Ошибка сохранения профиля"));
+        showToast(parseError(error, "Не удалось переключить роль"));
       }
-    }, { button: e.submitter, loadingText: "Сохраняем...", global: true, globalText: "Сохраняем профиль..." });
-  });
+    });
+  }
+
+  if (els.switchToTaskerBtn) {
+    els.switchToTaskerBtn.addEventListener("click", async (e) => {
+      try {
+        await switchRole("Исполнитель", e.currentTarget);
+      } catch (error) {
+        showToast(parseError(error, "Не удалось переключить роль"));
+      }
+    });
+  }
+
+ els.authForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  await withLoading(async () => {
+    try {
+      const selectedRole = els.roleInput.value;
+      if (!["Клиент", "Исполнитель"].includes(selectedRole)) {
+        showToast("Выберите роль");
+        return;
+      }
+
+      await upsertProfile({ role: selectedRole });
+      syncRoleUI();
+
+      els.authScreen.classList.add("hidden");
+      els.appContent.classList.remove("hidden");
+
+      await refreshData();
+      updateProfileUI();
+      setProfileFormEditable(false);
+      initRealtimeSubscriptions();
+      setScreen("home");
+      showToast("Профиль сохранён");
+    } catch (error) {
+      showToast(parseError(error, "Ошибка сохранения профиля"));
+    }
+  }, { button: e.submitter, loadingText: "Сохраняем...", global: true, globalText: "Сохраняем профиль..." });
+    });
 
   els.profileForm.addEventListener("submit", async (e) => {
     e.preventDefault();
