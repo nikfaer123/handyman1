@@ -135,7 +135,10 @@
 
         <section id="chatsScreen" class="screen hidden">
           <section class="panel soft-card raised">
-            <h3 class="section-title">Чаты</h3>
+            <div class="section-header compact">
+              <h3 class="section-title">Чаты</h3>
+              <button id="toggleArchivedChats" class="secondary-btn slim" type="button">Показать архив</button>
+            </div>
             <div id="chatsList" class="chat-list"></div>
             <p id="chatsEmpty" class="empty-state hidden"></p>
           </section>
@@ -168,7 +171,7 @@
             <form id="profileForm" class="auth-form compact-form">
               <label>Телефон <input id="profilePhone" placeholder="+7 900 123-45-67" /></label>
               <label>Город <input id="profileCity" placeholder="Москва" /></label>
-              <button type="submit" class="primary-btn">Сохранить профиль</button>
+              <button id="profileSubmitBtn" type="submit" class="primary-btn">Редактировать</button>
             </form>
           </section>
         </section>
@@ -209,6 +212,16 @@
           <button type="submit" class="primary-btn">Отправить отклик</button>
         </menu>
       </form>
+    </dialog>
+
+    <dialog id="responsesDialog">
+      <div class="dialog-content">
+        <h3>Все отклики</h3>
+        <div id="responsesDialogList" class="order-list"></div>
+        <menu>
+          <button id="closeResponsesDialog" type="button" class="secondary-btn">Закрыть</button>
+        </menu>
+      </div>
     </dialog>
 
     <template id="taskerTemplate">
