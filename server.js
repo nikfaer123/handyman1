@@ -346,6 +346,82 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, result);
     }
 
+    if (req.method === 'POST' && reqUrl.pathname === '/api/orders/assign-tasker') {
+      const auth = await requireAuth(req);
+      requireNotBlocked(auth.profile);
+      const body = await readJsonBody(req);
+
+      const orderId = String(body.orderId || '');
+      const taskerTelegramId = String(body.taskerTelegramId || '');
+      const taskerName = String(body.taskerName || '').trim();
+
+      if (!orderId || !taskerTelegramId) {
+        return sendJson(res, 400, { error: 'orderId and taskerTelegramId are required' });
+      }
+
+      const rows = await sbRequest(`orders?id=eq.${orderId}&select=*`);
+      const order = rows?.[0];
+
+      if (!order) {
+        return sendJson(res, 404, { error: 'Order not found' });
+      }
+
+      if (String(order.customer_telegram_id) !== String(auth.telegramId)) {
+        return sendJson(res, 403, { error: 'Only customer can assign a tasker' });
+      }
+
+      if (!['new', 'assigned', 'in_progress'].includes(order.status)) {
+        return sendJson(res, 400, { error: `Cannot assign tasker for status ${order.status}` });
+      }
+
+      const responseRows = await sbRequest(
+        `responses?order_id=eq.${orderId}&tasker_telegram_id=eq.${encodeURIComponent(taskerTelegramId)}&select=*`
+      );
+      const response = responseRows?.[0];
+
+      if (!response) {
+        return sendJson(res, 400, { error: 'Selected tasker has no response for this order' });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      const updatedRows = await sbRequest(`orders?id=eq.${orderId}`, {
+        method: 'PATCH',
+        body: {
+          assigned_tasker_telegram_id: taskerTelegramId,
+          assigned_tasker_name: taskerName || response.tasker_name || null,
+          status: 'in_progress',
+          updated_at: nowIso
+        }
+      });
+
+      const updatedOrder = updatedRows?.[0];
+      if (!updatedOrder) {
+        return sendJson(res, 500, { error: 'Failed to assign tasker' });
+      }
+
+      const existingChats = await sbRequest(`chats?order_id=eq.${orderId}&select=*`);
+      const existingChat = existingChats?.[0];
+
+      if (!existingChat) {
+        await sbRequest('chats', {
+          method: 'POST',
+          body: [{
+            order_id: orderId,
+            customer_telegram_id: String(order.customer_telegram_id),
+            tasker_telegram_id: taskerTelegramId
+          }]
+        });
+      }
+
+      await notifyOrderParticipants(orderId, 'Исполнитель назначен. Заказ переведён в работу.', auth.telegramId);
+
+      return sendJson(res, 200, {
+        ok: true,
+        order: updatedOrder
+      });
+    }
+
     if (req.method === 'POST' && reqUrl.pathname === '/api/orders/complete-action') {
       const auth = await requireAuth(req);
       requireNotBlocked(auth.profile);
@@ -395,6 +471,7 @@ const server = http.createServer(async (req, res) => {
           method: 'PATCH',
           body: {
             status: 'done',
+            completed_at: nowIso,
             updated_at: nowIso
           }
         });
