@@ -1120,40 +1120,7 @@ function renderResponses(order) {
     els.responsesList.append(openArchiveBtn);
   }
 }
-
-    if (appState.isAdmin) {
-      const blockBtn = document.createElement("button");
-      blockBtn.type = "button";
-      blockBtn.className = "secondary-btn slim";
-      blockBtn.textContent = "Блокировать";
-      blockBtn.onclick = async () => {
-        const reason = prompt("Причина блокировки:", "Нарушение правил") || "Заблокирован администратором";
-        if (!confirmAction(`Заблокировать @${r.taskerName}?`)) return;
-        try {
-          await apiRequest("/api/admin/block-user", {
-            method: "POST",
-            body: { targetTelegramId: r.taskerId, reason }
-          });
-          showToast("Пользователь заблокирован");
-        } catch (error) {
-          showToast(parseError(error, "Не удалось заблокировать пользователя"));
-        }
-      };
-      card.append(blockBtn);
-    }
-
-    els.responsesList.append(card);
-
-  if (visible.length > limit) {
-    const openArchiveBtn = document.createElement("button");
-    openArchiveBtn.type = "button";
-    openArchiveBtn.className = "secondary-btn slim";
-    openArchiveBtn.textContent = `Показать все (${visible.length})`;
-    openArchiveBtn.onclick = () => openResponsesArchive(order);
-    els.responsesList.append(openArchiveBtn);
-  }
   
-
 function renderOrderDetail() {
   const order = appState.orders.find((o) => o.id === appState.ui.selectedOrderId);
   if (!order) return;
